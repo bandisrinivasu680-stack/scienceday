@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>National Science Day - FIZONYX</title>
+    <style>
+        /* CSS Reset and High-Performance Setup */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: radial-gradient(circle at 50% 50%, #1a1a2e 0%, #08080f 100%);
+            overflow: hidden;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #ffffff;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Glassmorphism Card Styling */
+        #wishesCard {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -40%) scale(0.9);
+            width: 90%;
+            max-width: 600px;
+            background: rgba(20, 20, 30, 0.4);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 24px;
+            padding: 50px 30px;
+            text-align: center;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(255, 255, 255, 0.05);
+            z-index: 10;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        #wishesCard.visible {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(90deg, #00f2fe, #4facfe, #00f2fe);
+            background-size: 200% auto;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            margin-bottom: 20px;
+            letter-spacing: 1px;
+            animation: shine 3s linear infinite;
+        }
+
+        p.subtitle {
+            font-size: 1.2rem;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 30px;
+            font-weight: 400;
+        }
+
+        .brand-link {
+            display: inline-block;
+            text-decoration: none;
+            color: #fff;
+            font-weight: 900;
+            font-size: 1.4rem;
+            letter-spacing: 2px;
+            padding: 10px 25px;
+            border-radius: 50px;
+            background: linear-gradient(135deg, #ff0844 0%, #ffb199 100%);
+            box-shadow: 0 10px 20px rgba(255, 8, 68, 0.3);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .brand-link:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 25px rgba(255, 8, 68, 0.5);
+        }
+
+        .replay-btn {
+            position: absolute;
+            bottom: -80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .replay-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        @keyframes shine {
+            to { background-position: 200% center; }
+        }
+
+        @media (max-width: 600px) {
+            h1 { font-size: 1.8rem; }
+            p.subtitle { font-size: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="labCanvas"></canvas>
+
+    <div id="wishesCard">
+        <h1>Happy National Science Day</h1>
+        <p class="subtitle">from Gana Ram Sai by <br><br>
+            <a href="https://fizonyx-official-web.onrender.com" target="_blank" class="brand-link">FIZONYX</a>
+        </p>
+        <button class="replay-btn" onclick="startExperiment()">Replay Experiment</button>
+    </div>
+
+    <script>
+        /**
+         * FIZONYX - High Performance Fluid Simulation System
+         * Architecture: Version 2.1 (Height & Collision Fixes)
+         * Engine: HTML5 Canvas 2D
+         */
+
+        const canvas = document.getElementById('labCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false }); // Optimize for performance
+        let cw, ch;
+
+        // Path2D Objects from Reference Code
+        const flaskPathSvg = "M 40 5 L 60 5 L 60 30 Q 60 40 75 60 Q 90 80 95 100 Q 100 115 50 115 Q 0 115 5 100 Q 10 80 25 60 Q 40 40 40 30 Z";
+        const pathFlask = new Path2D(flaskPathSvg);
+        const pathHighlight1 = new Path2D("M 20 85 Q 12 100 25 108");
+        const pathHighlight2 = new Path2D("M 45 10 L 45 25");
+
+        // Simulation State Machine
+        let simState = 'idle'; // idle, pouring, reacting, erupting, finished
+        let frameCount = 0;
+
+        // Experiment Variables
+        let bottomLiquidVolume = 0.3; // 30% full initially
+        let topLiquidVolume = 0.6; // 60% full initially
+        let bottomLiquidColor = { r: 0, g: 210, b: 255 }; // Cyan
+        let targetColor = { r: 57, g: 255, b: 20 }; // Neon Green Reaction
+        
+        let particles = [];
+        let foamParticles = [];
+
+        // Dynamic Flask Scaling and Dimensions based on SVG viewBox (100x120)
+        const bFlaskScale = 2.8;
+        const tFlaskScale = 1.4;
+
+        const bFlask = { x: 0, y: 0, svgCenter: 50, svgBottom: 115, height: 115 * bFlaskScale };
+        const tFlask = { x: 0, y: 0, angle: 0, targetAngle: Math.PI / 1.8, svgCenter: 50, svgCenterY: 57.5 };
+
+        function resize() {
+            cw = canvas.width = window.innerWidth;
+            ch = canvas.height = window.innerHeight;
+            
+            // Position bottom flask at bottom center
+            bFlask.x = cw / 2;
+            bFlask.y = ch - 100;
+            
+            // Position top flask initially (Ensure it is ABOVE the bottom flask)
+            tFlask.x = cw / 2 + 150;
+            tFlask.y = bFlask.y - (115 * bFlaskScale) - 60; 
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // ----------------- PHYSICS & PARTICLES -----------------
+
+        class LiquidParticle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                // Reduced horizontal spread to prevent spilling outside the narrow neck
+                this.vx = (Math.random() - 0.5) * 0.5; 
+                this.vy = Math.random() * 2;
+                this.radius = Math.random() * 3 + 2;
+                this.color = 'rgba(255, 0, 127, 0.9)'; // Magenta liquid pouring
+                this.dead = false;
+            }
+            update() {
+                this.vy += 0.3; // Gravity
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Collision with bottom liquid surface 
+                // SVG usable liquid height is roughly 110 units (from y=115 up to y=5)
+                const surfaceY = bFlask.y - (110 * bFlaskScale * bottomLiquidVolume);
+                const leftBound = bFlask.x - (30 * bFlaskScale);
+                const rightBound = bFlask.x + (30 * bFlaskScale);
+
+                if (this.y > surfaceY && this.x > leftBound && this.x < rightBound) {
+                    this.dead = true;
+                    bottomLiquidVolume = Math.min(0.95, bottomLiquidVolume + 0.001);
+                    
+                    // Create splash
+                    if(Math.random() > 0.5) {
+                        foamParticles.push(new FoamParticle(this.x, surfaceY, true));
+                    }
+                }
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+        }
+
+        class FoamParticle {
+            constructor(x, y, isSplash = false) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * (isSplash ? 4 : 2);
+                this.vy = isSplash ? (Math.random() * -3 - 2) : (Math.random() * -6 - 2);
+                this.radius = isSplash ? Math.random() * 3 + 1 : Math.random() * 10 + 5;
+                this.life = 1.0;
+                this.decay = isSplash ? 0.05 : 0.005;
+                this.isSplash = isSplash;
+                this.hue = Math.random() * 40 + 80; // Greenish foam
+            }
+            update() {
+                if(!this.isSplash) {
+                    this.radius += 0.2; // Foam expands
+                    
+                    // Constrain foam logic based on new Flask Shape Neck
+                    const neckTopY = bFlask.y - (110 * bFlaskScale);
+                    const neckBottomY = bFlask.y - (85 * bFlaskScale);
+
+                    if (this.y < neckTopY) {
+                        this.vy += 0.2; // Gravity takes over once out of flask
+                        this.vx *= 1.05; // Spreads out
+                    } else if (this.y < neckBottomY) {
+                        this.vx *= 0.85; // Constrained by narrow neck
+                    }
+                } else {
+                    this.vy += 0.2; // Splash gravity
+                }
+
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= this.decay;
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                if (this.isSplash) {
+                    ctx.fillStyle = `rgba(57, 255, 20, ${this.life})`;
+                } else {
+                    ctx.fillStyle = `hsla(${this.hue}, 80%, 70%, ${this.life * 0.8})`;
+                }
+                ctx.fill();
+            }
+        }
+
+        // ----------------- DRAWING FUNCTIONS -----------------
+
+        function drawBottomFlask() {
+            ctx.save();
+            
+            // Translate to center bottom of the flask position on canvas
+            ctx.translate(bFlask.x - bFlask.svgCenter * bFlaskScale, bFlask.y - bFlask.svgBottom * bFlaskScale);
+            ctx.scale(bFlaskScale, bFlaskScale);
+
+            // 1. Draw Liquid
+            ctx.save();
+            ctx.clip(pathFlask); // Perfectly molds liquid to the new round shape
+            
+            const svgSurfaceY = 115 - (110 * bottomLiquidVolume);
+            
+            const c = bottomLiquidColor;
+            ctx.fillStyle = `rgba(${Math.floor(c.r)}, ${Math.floor(c.g)}, ${Math.floor(c.b)}, 0.9)`;
+            ctx.fillRect(0, svgSurfaceY, 100, 115 - svgSurfaceY);
+            
+            // Highlight on liquid
+            ctx.fillStyle = 'rgba(255,255,255,0.15)';
+            ctx.fillRect(0, svgSurfaceY, 50, 115 - svgSurfaceY);
+            ctx.restore();
+
+            // 2. Draw Glass Outline
+            ctx.lineWidth = 3 / bFlaskScale;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.fill(pathFlask);
+            ctx.stroke(pathFlask);
+
+            // 3. Draw Rim
+            ctx.beginPath();
+            ctx.ellipse(50, 5, 12, 3, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 4. Draw Highlights
+            ctx.lineWidth = 2 / bFlaskScale;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.lineCap = 'round';
+            ctx.stroke(pathHighlight1);
+            ctx.stroke(pathHighlight2);
+
+            ctx.restore();
+        }
+
+        function drawTopFlask() {
+            ctx.save();
+            
+            // Translate to top flask coordinates, rotate around its center
+            ctx.translate(tFlask.x, tFlask.y);
+            ctx.rotate(tFlask.angle);
+            
+            // Offset to match SVG center
+            ctx.translate(-tFlask.svgCenter * tFlaskScale, -tFlask.svgCenterY * tFlaskScale);
+            ctx.scale(tFlaskScale, tFlaskScale);
+
+            // 1. Draw Liquid (with tilt compensation)
+            if (simState === 'pouring' || simState === 'idle') {
+                ctx.save();
+                ctx.clip(pathFlask);
+                
+                // Tilt liquid compensation
+                ctx.translate(tFlask.svgCenter, tFlask.svgCenterY);
+                ctx.rotate(-tFlask.angle);
+                ctx.translate(-tFlask.svgCenter, -tFlask.svgCenterY);
+                
+                const svgY = 115 - (110 * topLiquidVolume);
+                ctx.fillStyle = 'rgba(255, 0, 127, 0.9)'; // Magenta
+                ctx.fillRect(-100, svgY, 300, 300); // Oversized rect to cover bounds during rotation
+                ctx.restore();
+            }
+
+            // 2. Draw Glass Outline
+            ctx.lineWidth = 3 / tFlaskScale;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.fill(pathFlask);
+            ctx.stroke(pathFlask);
+
+            // 3. Draw Rim & Highlights
+            ctx.beginPath();
+            ctx.ellipse(50, 5, 12, 3, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            ctx.lineWidth = 2 / tFlaskScale;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.lineCap = 'round';
+            ctx.stroke(pathHighlight1);
+
+            ctx.restore();
+        }
+
+        // ----------------- EXPERIMENT LOGIC -----------------
+
+        function emitPouringLiquid() {
+            // Calculate exact lip position using trigonometry mapped to new SVG coordinates
+            const lipOffsetX = (40 - 50) * tFlaskScale;
+            const lipOffsetY = (5 - 57.5) * tFlaskScale;
+            
+            const cosA = Math.cos(tFlask.angle);
+            const sinA = Math.sin(tFlask.angle);
+            
+            // World coordinates of the precise pouring point
+            const worldLipX = tFlask.x + (lipOffsetX * cosA - lipOffsetY * sinA);
+            const worldLipY = tFlask.y + (lipOffsetX * sinA + lipOffsetY * cosA);
+
+            // Spawn particles
+            for(let i=0; i<3; i++) {
+                particles.push(new LiquidParticle(worldLipX, worldLipY));
+            }
+        }
+
+        function colorLerp(current, target, factor) {
+            return {
+                r: current.r + (target.r - current.r) * factor,
+                g: current.g + (target.g - current.g) * factor,
+                b: current.b + (target.b - current.b) * factor
+            };
+        }
+
+        // ----------------- MAIN LOOP -----------------
+
+        function animate() {
+            ctx.fillStyle = '#111118'; // Clear background
+            ctx.fillRect(0, 0, cw, ch);
+            
+            // Draw radial glow behind
+            let gradient = ctx.createRadialGradient(cw/2, ch/2, 100, cw/2, ch/2, 600);
+            gradient.addColorStop(0, 'rgba(30, 30, 60, 0.5)');
+            gradient.addColorStop(1, 'rgba(10, 10, 20, 0.5)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, cw, ch);
+
+            // Sequence Logic
+            frameCount++;
+
+            if (simState === 'idle' && frameCount > 60) {
+                simState = 'pouring';
+            }
+
+            if (simState === 'pouring') {
+                // Smooth rotation to target angle
+                tFlask.angle += (tFlask.targetAngle - tFlask.angle) * 0.05;
+                
+                // Move top flask so the lip aligns perfectly with the bottom flask's neck
+                tFlask.x += (bFlask.x - 70 - tFlask.x) * 0.05;
+
+                // When tilted enough, start pouring and draining
+                if (tFlask.angle > 1.0) {
+                    if(topLiquidVolume > 0) {
+                        emitPouringLiquid();
+                        topLiquidVolume -= 0.003;
+                    }
+                    
+                    // Transition to reacting
+                    if (frameCount > 280) {
+                        simState = 'reacting';
+                        tFlask.targetAngle = 0; // Stand back up
+                    }
+                }
+            }
+
+            if (simState === 'reacting') {
+                tFlask.angle += (tFlask.targetAngle - tFlask.angle) * 0.05; // Revert angle
+                tFlask.x += (cw/2 + 150 - tFlask.x) * 0.05; // Move back
+                
+                // Change color smoothly
+                bottomLiquidColor = colorLerp(bottomLiquidColor, targetColor, 0.02);
+
+                if (frameCount > 380) {
+                    simState = 'erupting';
+                }
+            }
+
+            if (simState === 'erupting') {
+                tFlask.angle += (0 - tFlask.angle) * 0.05;
+                tFlask.x += (cw/2 + 200 - tFlask.x) * 0.05;
+                
+                // Spawn dense foam at the surface
+                const surfaceY = bFlask.y - (110 * bFlaskScale * bottomLiquidVolume);
+                for(let i=0; i<8; i++) {
+                    let rx = bFlask.x + (Math.random() * 40 - 20) * bFlaskScale;
+                    foamParticles.push(new FoamParticle(rx, surfaceY));
+                }
+
+                if (frameCount > 650) {
+                    simState = 'finished';
+                    document.getElementById('wishesCard').classList.add('visible');
+                }
+            }
+
+            // Render Calls
+            drawBottomFlask();
+            drawTopFlask();
+
+            // Update & Draw Liquid Particles
+            ctx.globalCompositeOperation = 'screen';
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.update();
+                p.draw();
+                if (p.dead) particles.splice(i, 1);
+            }
+            
+            // Update & Draw Foam Particles
+            ctx.globalCompositeOperation = 'source-over';
+            for (let i = foamParticles.length - 1; i >= 0; i--) {
+                let p = foamParticles[i];
+                p.update();
+                p.draw();
+                if (p.life <= 0) foamParticles.splice(i, 1);
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // Start Controller
+        function startExperiment() {
+            document.getElementById('wishesCard').classList.remove('visible');
+            simState = 'idle';
+            frameCount = 0;
+            bottomLiquidVolume = 0.3;
+            topLiquidVolume = 0.6;
+            bottomLiquidColor = { r: 0, g: 210, b: 255 };
+            particles = [];
+            foamParticles = [];
+            tFlask.angle = 0;
+            tFlask.x = cw / 2 + 150;
+            tFlask.y = bFlask.y - (115 * bFlaskScale) - 60; // Reset height correctly
+        }
+
+        // Initialize Simulation
+        animate();
+
+    </script>
+</body>
+</html>
